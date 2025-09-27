@@ -1,6 +1,7 @@
 #include <util/delay.h>
 #include <Arduino.h>
-#include "MyUSART.h"
+#define slave_addLCD    0b01001110
+#define backLight       0b00001000 //third bit for display on/off
 #define clk_speed 16000000
 #define baud 9600
 #define my_ubrr (clk_speed/16/baud-1)
@@ -87,10 +88,73 @@ uint8_t RTC_register_read(uint8_t reg){
   return data;
 
 }
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//LCD CODE
+void lcd_sendNibble(uint8_t nibble,uint8_t flag){
+  uint16_t lcd_byte=(nibble|flag|backLight);
+  i2c_write(lcd_byte|1<<2);
+  _delay_ms(5);
+  i2c_write(lcd_byte);
+}
+void lcd_send_data(uint8_t data,uint8_t flag){
+  i2c_start();
+  i2c_write(slave_addLCD);
+  lcd_sendNibble((data&0xF0),  flag);//sending 4 high bit or 4 most significant bit
+  lcd_sendNibble((data<<4)&0xF0,  flag);//sending low 4 bit or 4 least significant bit
+  i2c_stop();
+}
+///////////////////////////////////////////////////////////////////////////////////////////LAYER 3
+void lcd_cmd(uint8_t command){
+  lcd_send_data(command, command_flag);
+
+}
+void lcd_char(char character){
+  lcd_send_data(character, read_flag);
+}
+void lcd_init(void){
+  //a special wake up sequence
+  uint8_t wakeUP=0x30;
+  i2c_start();
+  _delay_ms(40);
+  i2c_write(slave_addLCD);//sending slave add
+  _delay_ms(1);
+  lcd_sendNibble(wakeUP,command_flag); 
+  _delay_ms(1);
+  lcd_sendNibble(wakeUP,command_flag); 
+  _delay_ms(1);
+  lcd_sendNibble(wakeUP,command_flag); 
+  _delay_ms(1);
+  lcd_sendNibble(wakeUP,command_flag); 
+  _delay_ms(1);
+  lcd_sendNibble(wakeUP,command_flag); 
+  _delay_ms(5);
+
+  //now that we woke up the chip from the lcd now we gonna do our configration look at the HD44780U (LCD-II), (Dot Matrix Liquid Crystal Display Controller/Driver) datasheet for  more info
+  lcd_cmd(0b00000010);//return home add
+  _delay_ms(5);
+  lcd_cmd(0b00101000);//funstion set: DL=4 bit | N=2lines | F=5x8 dots
+  _delay_ms(5);
+  lcd_cmd(0b00001100);//display control: display on \ cursor move\ no blink
+  _delay_ms(5);
+  lcd_cmd(0b00000001);//clearing the disp
+  _delay_ms(5);
+  lcd_cmd(0b00000110);//entry mode set
+  _delay_ms(5);
+  i2c_stop();
+}
+//now we need a function to display strings on the lcd
+void lcd_print_string(const char* str) {
+    while (*str) {
+        lcd_char(*str++);
+        
+    }
+}//done
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 char buff[80];
 void setup() {
   i2c_init();
-  Serial.begin(9600);
+  lcd_init();
+  //Serial.begin(9600);
  // USART_init(my_ubrr);
   //again these datas are not in binary they are in BCD format 
   RTC_register_write(0b01000101,0x00);//second :45
@@ -103,9 +167,13 @@ void loop() {
   uint8_t sec=BCD_to_dec(RTC_register_read(0x00));
   uint8_t min=BCD_to_dec(RTC_register_read(0x01));
   uint8_t hr=BCD_to_dec(RTC_register_read(0x02));
-  sprintf(buff,"sec: %d min: %d hour: %d\n\r",sec,min,hr);
-  Serial.println(buff);
-  delay(100);
+  sprintf(buff,"Time:%d:%d:%02d",hr,min,sec);
+  //Serial.println(buff);
+    lcd_cmd(0b10000000);
+
+  lcd_print_string(buff);
+  delay(1000);
   
+
 
 }
