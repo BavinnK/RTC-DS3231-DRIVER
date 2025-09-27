@@ -1,6 +1,6 @@
 #include <util/delay.h>
 #include <Arduino.h>
-//#include "MyUSART.h"
+#include "MyUSART.h"
 #define clk_speed 16000000
 #define baud 9600
 #define my_ubrr (clk_speed/16/baud-1)
@@ -73,8 +73,7 @@ uint8_t RTC_register_read(uint8_t reg){
   i2c_start();
   i2c_write(slave_add2);
   i2c_write(reg);
-  TWCR=(1<<TWSTA)|(1<<TWINT)|(1<<TWEN);
-  while(!(TWCR&(1<<TWINT)));
+  i2c_start();
 
   ///////////////now we send another slave add buttt with read flag
   i2c_write(slave_add1);
@@ -88,8 +87,11 @@ uint8_t RTC_register_read(uint8_t reg){
   return data;
 
 }
+char buff[80];
 void setup() {
   i2c_init();
+  Serial.begin(9600);
+ // USART_init(my_ubrr);
   //again these datas are not in binary they are in BCD format 
   RTC_register_write(0b01000101,0x00);//second :45
   RTC_register_write(0b00100101,0x01);//minute : 25
@@ -98,6 +100,12 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  uint8_t sec=BCD_to_dec(RTC_register_read(0x00));
+  uint8_t min=BCD_to_dec(RTC_register_read(0x01));
+  uint8_t hr=BCD_to_dec(RTC_register_read(0x02));
+  sprintf(buff,"sec: %d min: %d hour: %d\n\r",sec,min,hr);
+  Serial.println(buff);
+  delay(100);
+  
 
 }
